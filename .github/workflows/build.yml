@@ -35,27 +35,50 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
+      # --- Create a dummy :backends parent so we avoid evaluating the real backends/build.gradle ---
+      - name: Create dummy parent projects
+        run: |
+          mkdir -p ci-dummy/backends
+          cat > ci-dummy/backends/build.gradle <<'EOF'
+          // Intentionally empty: prevents evaluating the real backends/build.gradle in CI
+          plugins { id 'base' }
+          EOF
+
+      # --- Desktop-only settings: include :gdx and :backends:gdx-backend-lwjgl3 ---
+      # Map :backends to the dummy dir so its real build.gradle (which references Android) is never evaluated.
       - name: Create desktop-only settings
         run: |
           cat > settings-ci.gradle.kts <<'EOF'
           rootProject.name = "libgdx-desktop-ci"
-          // Desktop modules only:
+
+          // Use a dummy parent for :backends to avoid evaluating the real backends/build.gradle
+          include(":backends")
+          project(":backends").projectDir = file("ci-dummy/backends")
+
+          // Include only desktop modules:
           include(":gdx")
           include(":backends:gdx-backend-lwjgl3")
-          // Add more non-Android modules if you want them built/analyzed:
-          // include(":backends:gdx-backend-headless")
-          // include(":backends:gdx-backend-lwjgl")
-          // include(":extensions:gdx-tools")
-          // include(":extensions:gdx-freetype")
+          // Point the child to the real source dir:
+          project(":backends:gdx-backend-lwjgl3").projectDir = file("backends/gdx-backend-lwjgl3")
+
+          // You can add more non-Android modules if you like:
+          // include(":backends:gdx-backend-headless"); project(":backends:gdx-backend-headless").projectDir = file("backends/gdx-backend-headless")
+          // include(":backends:gdx-backend-lwjgl");   project(":backends:gdx-backend-lwjgl").projectDir   = file("backends/gdx-backend-lwjgl")
+          // include(":extensions:gdx-tools");         project(":extensions:gdx-tools").projectDir         = file("extensions/gdx-tools")
           EOF
 
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+
+      # Pass a flag so your root build.gradle skips publish/dist/etc.
       - name: Build (desktop only)
         run: ./gradlew -c settings-ci.gradle.kts -PciDesktopOnly=true build --warning-mode all --info
 
       - name: SonarQube analyze (desktop only)
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          # SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}   # if self-hosted
+          # If using self-hosted SonarQube, also set SONAR_HOST_URL as a repo secret:
+          # SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           ./gradlew -c settings-ci.gradle.kts -PciDesktopOnly=true sonar \
             -Dsonar.login=${SONAR_TOKEN} \

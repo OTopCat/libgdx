@@ -218,3 +218,14 @@ if(rootProject.file('override.gradle').exists())
 	apply from: rootProject.file('override.gradle')
 
 apply from: "gradle/dist.gradle"
+
+plugins {
+  id "org.sonarqube" version "7.0.1.6134"
+}
+
+sonar {
+  properties {
+    property "sonar.projectKey", "OTopCat_libgdx"
+    property "sonar.organization", "otopcat"
+  }
+}

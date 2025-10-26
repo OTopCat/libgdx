@@ -32,14 +32,14 @@ plugins {
 }
 
 plugins {
-  id "org.sonarqube" version "7.0.1.6134"
+	id "org.sonarqube" version "7.0.1.6134"
 }
 
 sonar {
-  properties {
-    property "sonar.projectKey", "OTopCat_libgdx"
-    property "sonar.organization", "otopcat"
-  }
+	properties {
+		property "sonar.projectKey", "OTopCat_libgdx"
+		property "sonar.organization", "otopcat"
+	}
 }
 apply from: "gradle/dependencies.gradle"
 

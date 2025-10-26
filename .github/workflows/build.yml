@@ -39,11 +39,14 @@ jobs:
         run: |
           cat > settings-ci.gradle.kts <<'EOF'
           rootProject.name = "libgdx-desktop-ci"
+          // Include ONLY desktop-friendly modules here:
           include(":gdx")
           include(":backends:gdx-backend-lwjgl3")
-          # add any other non-Android modules you want:
-          # include(":backends:gdx-backend-headless")
-          # include(":extensions:gdx-tools")
+          // If you want more non-Android modules, uncomment/add:
+          // include(":backends:gdx-backend-headless")
+          // include(":backends:gdx-backend-lwjgl")
+          // include(":extensions:gdx-tools")
+          // include(":extensions:gdx-freetype")
           EOF
 
       - name: Build

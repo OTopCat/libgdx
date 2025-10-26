@@ -333,4 +333,6 @@ if (!project.hasProperty("skipPublishGradle")) {
 if(rootProject.file('override.gradle').exists())
 	apply from: rootProject.file('override.gradle')
 
-apply from: "gradle/dist.gradle"
+if (!project.hasProperty("desktopOnly")) {
+  apply from: "gradle/dist.gradle"
+}

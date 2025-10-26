@@ -45,36 +45,49 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle
 
-      # --- Desktop-only settings (adjust includes as needed) ---
+      # --- Create a dummy android-tests project so root build.gradle references resolve ---
+      - name: Create dummy android tests project
+        run: |
+          mkdir -p ci-dummy/tests/gdx-tests-android/src/main/java
+          cat > ci-dummy/tests/gdx-tests-android/build.gradle <<'EOF'
+          plugins { id 'java-library' }
+          java {
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
+          }
+          // no sources; this is just a stub so root build can reference the project
+          EOF
+
+      # --- Desktop-only settings: include desktop modules + map the dummy android tests project ---
+      # Adjust the includes to match the desktop modules you actually want to build.
       - name: Create desktop-only settings
         run: |
           cat > settings-ci.gradle.kts <<'EOF'
-          // Only include desktop-friendly modules here.
           rootProject.name = "libgdx-desktop-ci"
+
+          // Desktop/Java modules you want to analyze:
           include(":gdx")
           include(":backends:gdx-backend-lwjgl3")
-          // If you need extras (e.g., tools), add more here:
+          // add any other non-Android modules here, e.g.:
           // include(":extensions:gdx-tools")
-          EOF
 
-      # --- Band-aid: comment out any references to the Android tests project ---
-      - name: Disable android tests references
-        run: |
-          if grep -RIn ":tests:gdx-tests-android" build.gradle; then
-            sed -E -i 's/(.*:tests:gdx-tests-android.*)/\/\/ \1/g' build.gradle
-          fi
+          // Add a dummy replacement for the Android tests project so references don't fail
+          include(":tests:gdx-tests-android")
+          project(":tests:gdx-tests-android").projectDir = file("ci-dummy/tests/gdx-tests-android")
+          EOF
 
       - name: Make Gradle executable
         run: chmod +x gradlew
 
+      # Build only the projects listed in settings-ci.gradle.kts
       - name: Build desktop
         run: ./gradlew -c settings-ci.gradle.kts build --warning-mode all --info
 
       - name: SonarQube analyze (desktop-only)
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          # For self-hosted SonarQube add a repo secret SONAR_HOST_URL and it will be used:
-          # SONAR_HOST_URL: https://sonar.yourcompany.tld
+          # If using self-hosted SonarQube, add SONAR_HOST_URL as a repo secret
+          # SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           ./gradlew -c settings-ci.gradle.kts sonar \
             -Dsonar.login=${SONAR_TOKEN} \

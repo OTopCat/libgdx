@@ -144,49 +144,148 @@ configure(subprojects.findAll { it.path !in [":tests:gdx-tests-android", ":backe
 }
 
 // Apply IDE config to most projects but skip large aggregates / special cases
-configure(subprojects.findAll {
-  // exclude whole families and one specific parent
-  !it.path.startsWith(":backends") &&
-  !it.path.startsWith(":extensions") &&
-  !it.path.startsWith(":tests") &&
-  it.path != ":extensions:gdx-box2d-parent"
-}) {
-  apply plugin: "idea"
-  apply plugin: "eclipse"
+// Collect only projects that actually exist in THIS build.
+// Add/remove paths as you like — missing ones are filtered out safely.
+def publishPaths = [
+    ":gdx",
+    ":backends:gdx-backend-android",
+    ":backends:gdx-backend-headless",
+    ":backends:gdx-backend-lwjgl",
+    ":backends:gdx-backend-lwjgl3",
+    ":backends:gdx-backend-robovm",
+    ":backends:gdx-backend-robovm-metalangle",
+    ":backends:gdx-backend-gwt",
+    ":extensions:gdx-box2d-parent",
+    ":extensions:gdx-box2d-parent:gdx-box2d",
+    ":extensions:gdx-box2d-parent:gdx-box2d-gwt",
+    ":extensions:gdx-bullet",
+    ":extensions:gdx-freetype",
+    ":extensions:gdx-lwjgl3-angle",
+    ":extensions:gdx-tools"
+]
 
-  afterEvaluate {
-    eclipse {
-      project {
-        resourceFilter {
-          appliesTo = 'FOLDERS'
-          type = 'EXCLUDE_ALL'
-          matcher {
-            id = 'org.eclipse.ui.ide.multiFilter'
-            arguments = '1.0-projectRelativePath-matches-true-false-build'
-          }
+def publishProjects = publishPaths
+        .collect { path -> findProject(path) }   // returns null if not included
+        .findAll { it != null }                  // keep only present projects
+
+configure(publishProjects) {
+    apply plugin: 'maven-publish'
+    apply plugin: 'signing'
+
+    afterEvaluate { project ->
+        // Workaround: ensure components are populated
+        afterEvaluate {
+            publishing {
+                publications {
+                    mavenJava(MavenPublication) {
+                        // Standard Java publications (desktop modules)
+                        if (components.findByName("java") != null) {
+                            from components.java
+                        }
+                        // Android (if ever included in a non-desktop build)
+                        if (components.findByName("release") != null) {
+                            from components.release
+                        }
+                        pom {
+                            name = POM_NAME
+                            if (!POM_DESCRIPTION.isEmpty()) description = POM_DESCRIPTION
+                            url = POM_URL
+                            licenses {
+                                license {
+                                    name = POM_LICENCE_NAME
+                                    url = POM_LICENCE_URL
+                                    distribution = POM_LICENCE_DIST
+                                }
+                            }
+                            developers {
+                                developer {
+                                    id = "libGDX Developers"
+                                    url = "https://github.com/libgdx/libgdx/graphs/contributors"
+                                }
+                            }
+                            scm {
+                                connection = POM_SCM_CONNECTION
+                                developerConnection = POM_SCM_DEV_CONNECTION
+                                url = POM_SCM_URL
+                            }
+                        }
+                    }
+
+                    // Natives (if jnigen tasks exist)
+                    if (project.tasks.findByName('jnigen')) {
+                        mavenPlatform(MavenPublication) {
+                            artifactId = artifactId + "-platform"
+                            if (project.tasks.findByName('jnigenJarNativesDesktop'))
+                                artifact jnigenJarNativesDesktop { }
+
+                            ['arm64-v8a','armeabi-v7a','x86_64','x86'].each { id ->
+                                def t = "jnigenJarNativesAndroid${id}"
+                                if (project.tasks.findByName(t)) artifact(t) { }
+                            }
+
+                            if (project.tasks.findByName('jnigenJarNativesIOS'))
+                                artifact jnigenJarNativesIOS { }
+
+                            pom {
+                                name = POM_NAME + " Native Libraries"
+                                if (!POM_DESCRIPTION.isEmpty()) description = POM_DESCRIPTION
+                                url = POM_URL
+                                licenses {
+                                    license {
+                                        name = POM_LICENCE_NAME
+                                        url = POM_LICENCE_URL
+                                        distribution = POM_LICENCE_DIST
+                                    }
+                                }
+                                developers {
+                                    developer {
+                                        id = "libGDX Developers"
+                                        url = "https://github.com/libgdx/libgdx/graphs/contributors"
+                                    }
+                                }
+                                scm {
+                                    connection = POM_SCM_CONNECTION
+                                    developerConnection = POM_SCM_DEV_CONNECTION
+                                    url = POM_SCM_URL
+                                }
+                            }
+                        }
+                    }
+                }
+
+                repositories {
+                    maven {
+                        url = version.endsWith('SNAPSHOT')
+                                ? getSnapshotRepositoryUrl()
+                                : rootProject.layout.buildDirectory.dir('staging-deploy')
+                        if (version.endsWith('SNAPSHOT') && (getRepositoryUsername() || getRepositoryPassword())) {
+                            credentials {
+                                username = getRepositoryUsername()
+                                password = getRepositoryPassword()
+                            }
+                        }
+                    }
+                }
+            }
+
+            signing {
+                useGpgCmd()
+                if (publishing.publications.findByName("mavenJava")) {
+                    sign publishing.publications.mavenJava
+                }
+                if (project.tasks.findByName('jnigen') &&
+                    publishing.publications.findByName("mavenPlatform")) {
+                    sign publishing.publications.mavenPlatform
+                }
+            }
+
+            gradle.taskGraph.whenReady {
+                tasks.withType(Sign) {
+                    onlyIf { isReleaseBuild() }
+                }
+            }
         }
-      }
-      jdt {
-        file {
-          withProperties { properties ->
-            def libgdxJdtProperties = new Properties()
-            libgdxJdtProperties.load(new FileInputStream(".settings/org.eclipse.jdt.libgdx.prefs"))
-            properties.putAll(libgdxJdtProperties)
-          }
-        }
-      }
-      classpath.file {
-        whenMerged { classpath ->
-          classpath.entries.findAll { entry -> entry.kind == 'lib' || entry.kind == 'src' }*.exported = true
-        }
-      }
     }
-    eclipseJdt.doLast {
-      File f = new File(projectDir, '.settings/org.eclipse.core.resources.prefs')
-      f.write('eclipse.preferences.version=1\n')
-      f.append('encoding/<project>=UTF-8')
-    }
-  }
 }
 
 tasks.register('setupExternalNativesDirs') {

@@ -128,60 +128,65 @@ allprojects {
 	}
 }
 
-configure(subprojects - project(":tests:gdx-tests-android") - project(":backends:gdx-backend-android")) {
-	apply plugin: "java-library"
+// Configure all Java subprojects except the Android ones (if they exist)
+configure(subprojects.findAll { it.path !in [":tests:gdx-tests-android", ":backends:gdx-backend-android"] }) {
+  apply plugin: "java-library"
 
-	compileJava {
-		options.fork = true
-		options.incremental = true
-	}
+  compileJava {
+    options.fork = true
+    options.incremental = true
+  }
 
-	java {
-		withJavadocJar()
-		withSourcesJar()
-	}
+  java {
+    withJavadocJar()
+    withSourcesJar()
+  }
 }
 
-configure(subprojects - project(":backends") - project(":extensions") - project(":tests") - project(":extensions:gdx-box2d-parent")) {
-	apply plugin: "idea"
-	apply plugin: "eclipse"
+// Apply IDE config to most projects but skip large aggregates / special cases
+configure(subprojects.findAll {
+  // exclude whole families and one specific parent
+  !it.path.startsWith(":backends") &&
+  !it.path.startsWith(":extensions") &&
+  !it.path.startsWith(":tests") &&
+  it.path != ":extensions:gdx-box2d-parent"
+}) {
+  apply plugin: "idea"
+  apply plugin: "eclipse"
 
-	//This has to be done in afterEvaluate due to java/android plugin dependency
-	afterEvaluate {
-		eclipse {
-			project {
-				//hide gradle build folders from eclipse
-				resourceFilter {
-					appliesTo = 'FOLDERS'
-					type = 'EXCLUDE_ALL'
-					matcher {
-						id = 'org.eclipse.ui.ide.multiFilter'
-						arguments = '1.0-projectRelativePath-matches-true-false-build'
-					}
-				}
-			}
-			jdt {
-				file {
-					withProperties { properties ->
-						def libgdxJdtProperties = new Properties()
-						libgdxJdtProperties.load(new FileInputStream(".settings/org.eclipse.jdt.libgdx.prefs"))
-						properties.putAll(libgdxJdtProperties)
-					}
-				}
-			}
-			classpath.file {
-				whenMerged { classpath ->
-					classpath.entries.findAll { entry -> entry.kind == 'lib' || entry.kind == 'src' }*.exported = true
-				}
-			}
-		}
-		//Set all projects to use UTF-8 file encoding for all files
-		eclipseJdt.doLast {
-			File f = new File(projectDir, '.settings/org.eclipse.core.resources.prefs')
-			f.write('eclipse.preferences.version=1\n')
-			f.append('encoding/<project>=UTF-8')
-		}
-	}
+  afterEvaluate {
+    eclipse {
+      project {
+        resourceFilter {
+          appliesTo = 'FOLDERS'
+          type = 'EXCLUDE_ALL'
+          matcher {
+            id = 'org.eclipse.ui.ide.multiFilter'
+            arguments = '1.0-projectRelativePath-matches-true-false-build'
+          }
+        }
+      }
+      jdt {
+        file {
+          withProperties { properties ->
+            def libgdxJdtProperties = new Properties()
+            libgdxJdtProperties.load(new FileInputStream(".settings/org.eclipse.jdt.libgdx.prefs"))
+            properties.putAll(libgdxJdtProperties)
+          }
+        }
+      }
+      classpath.file {
+        whenMerged { classpath ->
+          classpath.entries.findAll { entry -> entry.kind == 'lib' || entry.kind == 'src' }*.exported = true
+        }
+      }
+    }
+    eclipseJdt.doLast {
+      File f = new File(projectDir, '.settings/org.eclipse.core.resources.prefs')
+      f.write('eclipse.preferences.version=1\n')
+      f.append('encoding/<project>=UTF-8')
+    }
+  }
 }
 
 tasks.register('setupExternalNativesDirs') {

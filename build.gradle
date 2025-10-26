@@ -326,13 +326,18 @@ tasks.register('fetchNatives', Copy) {
 	doNotTrackState("Don't track state")
 }
 
-if (!project.hasProperty("skipPublishGradle")) {
+// ---- CI gating for desktop-only builds ----
+def ciDesktopOnly = project.hasProperty("ciDesktopOnly")
+
+if (!ciDesktopOnly) {
   apply from: rootProject.file('publish.gradle')
 }
 
-if(rootProject.file('override.gradle').exists())
-	apply from: rootProject.file('override.gradle')
-
-if (!project.hasProperty("skipPublishGradle")) {
-  apply from: rootProject.file('publish.gradle')
+if (rootProject.file('override.gradle').exists()) {
+  apply from: rootProject.file('override.gradle')
 }
+
+if (!ciDesktopOnly) {
+  apply from: "gradle/dist.gradle"
+}
+// -------------------------------------------

@@ -14,8 +14,7 @@ jobs:
       pull-requests: read
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -45,48 +44,27 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle
 
-      # --- Create a dummy android-tests project so root build.gradle references resolve ---
-      - name: Create dummy android tests project
-        run: |
-          mkdir -p ci-dummy/tests/gdx-tests-android/src/main/java
-          cat > ci-dummy/tests/gdx-tests-android/build.gradle <<'EOF'
-          plugins { id 'java-library' }
-          java {
-            sourceCompatibility = JavaVersion.VERSION_17
-            targetCompatibility = JavaVersion.VERSION_17
-          }
-          // no sources; this is just a stub so root build can reference the project
-          EOF
-
-      # --- Desktop-only settings: include desktop modules + map the dummy android tests project ---
-      # Adjust the includes to match the desktop modules you actually want to build.
       - name: Create desktop-only settings
         run: |
           cat > settings-ci.gradle.kts <<'EOF'
           rootProject.name = "libgdx-desktop-ci"
-
-          // Desktop/Java modules you want to analyze:
+          // Include desktop-friendly modules only
           include(":gdx")
           include(":backends:gdx-backend-lwjgl3")
-          // add any other non-Android modules here, e.g.:
+          // Add other non-Android modules you want analyzed:
           // include(":extensions:gdx-tools")
-
-          // Add a dummy replacement for the Android tests project so references don't fail
-          include(":tests:gdx-tests-android")
-          project(":tests:gdx-tests-android").projectDir = file("ci-dummy/tests/gdx-tests-android")
           EOF
 
       - name: Make Gradle executable
         run: chmod +x gradlew
 
-      # Build only the projects listed in settings-ci.gradle.kts
-      - name: Build desktop
+      - name: Build desktop modules
         run: ./gradlew -c settings-ci.gradle.kts build --warning-mode all --info
 
       - name: SonarQube analyze (desktop-only)
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          # If using self-hosted SonarQube, add SONAR_HOST_URL as a repo secret
+          # For self-hosted SonarQube add this secret:
           # SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           ./gradlew -c settings-ci.gradle.kts sonar \

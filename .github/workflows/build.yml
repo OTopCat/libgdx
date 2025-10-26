@@ -45,31 +45,36 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle', '**/*.gradle.kts', '**/gradle-wrapper.properties') }}
           restore-keys: ${{ runner.os }}-gradle
 
-      # --- Create a CI-only settings file that excludes Android (and any other mobile modules) ---
-      # Adjust the includes to match your actual desktop modules.
+      # --- Desktop-only settings (adjust includes as needed) ---
       - name: Create desktop-only settings
         run: |
           cat > settings-ci.gradle.kts <<'EOF'
+          // Only include desktop-friendly modules here.
           rootProject.name = "libgdx-desktop-ci"
-          // Include ONLY desktop-related subprojects here:
-          include(":core", ":desktop")
-          // If you have more non-Android modules, add them:
-          // include(":shared", ":tools", ":lwjgl3", ":headless")
+          include(":gdx")
+          include(":backends:gdx-backend-lwjgl3")
+          // If you need extras (e.g., tools), add more here:
+          // include(":extensions:gdx-tools")
           EOF
+
+      # --- Band-aid: comment out any references to the Android tests project ---
+      - name: Disable android tests references
+        run: |
+          if grep -RIn ":tests:gdx-tests-android" build.gradle; then
+            sed -E -i 's/(.*:tests:gdx-tests-android.*)/\/\/ \1/g' build.gradle
+          fi
 
       - name: Make Gradle executable
         run: chmod +x gradlew
 
-      # Build only the projects listed in settings-ci.gradle.kts
       - name: Build desktop
         run: ./gradlew -c settings-ci.gradle.kts build --warning-mode all --info
 
-      # Run SonarQube analysis on just those modules
       - name: SonarQube analyze (desktop-only)
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          # If using a self-hosted SonarQube, also set SONAR_HOST_URL secret:
-          # SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          # For self-hosted SonarQube add a repo secret SONAR_HOST_URL and it will be used:
+          # SONAR_HOST_URL: https://sonar.yourcompany.tld
         run: |
           ./gradlew -c settings-ci.gradle.kts sonar \
             -Dsonar.login=${SONAR_TOKEN} \

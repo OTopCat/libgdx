@@ -39,24 +39,24 @@ jobs:
         run: |
           cat > settings-ci.gradle.kts <<'EOF'
           rootProject.name = "libgdx-desktop-ci"
-          // Include ONLY desktop-friendly modules here:
+          // Desktop modules only:
           include(":gdx")
           include(":backends:gdx-backend-lwjgl3")
-          // Add more non-Android modules if you want:
+          // Add more non-Android modules if you want them built/analyzed:
           // include(":backends:gdx-backend-headless")
           // include(":backends:gdx-backend-lwjgl")
           // include(":extensions:gdx-tools")
           // include(":extensions:gdx-freetype")
           EOF
 
-      - name: Build
-        run: ./gradlew -c settings-ci.gradle.kts -PdesktopOnly=true build --warning-mode all --info
+      - name: Build (desktop only)
+        run: ./gradlew -c settings-ci.gradle.kts -PciDesktopOnly=true build --warning-mode all --info
 
-      - name: SonarQube analyze
+      - name: SonarQube analyze (desktop only)
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          # SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}  # if self-hosted
+          # SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}   # if self-hosted
         run: |
-          ./gradlew -c settings-ci.gradle.kts -PdesktopOnly=true sonar \
+          ./gradlew -c settings-ci.gradle.kts -PciDesktopOnly=true sonar \
             -Dsonar.login=${SONAR_TOKEN} \
             ${{ secrets.SONAR_HOST_URL && format('-Dsonar.host.url={0}', secrets.SONAR_HOST_URL) || '' }}
